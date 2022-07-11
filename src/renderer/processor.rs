@@ -5,7 +5,7 @@ use std::io::Write;
 use serde_json::{to_string_pretty, to_value, Number, Value};
 
 use crate::context::{ValueRender, ValueTruthy};
-use crate::errors::{Error, Result};
+use crate::errors::{Error, RenderErrorKind, Result};
 use crate::parser::ast::*;
 use crate::renderer::call_stack::CallStack;
 use crate::renderer::for_loop::ForLoop;
@@ -75,11 +75,10 @@ fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
     if !path.contains('[') {
         match call_stack.lookup(path) {
             Some(v) => Ok(v),
-            None => Err(Error::msg(format!(
-                "Variable `{}` not found in context while rendering '{}'",
-                path,
-                call_stack.active_template().name
-            ))),
+            None => Err(Error::render(
+                RenderErrorKind::missing_variable(path),
+                &call_stack.active_template().name,
+            )),
         }
     } else {
         let full_path = evaluate_sub_variables(path, call_stack)?;

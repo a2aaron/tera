@@ -39,6 +39,13 @@ pub enum ErrorKind {
     CallFilter(String),
     /// An error occured while executing a test.
     CallTest(String),
+    /// A rendering error occured.
+    RenderError {
+        /// The kind of rendering error that occured.
+        kind: RenderErrorKind,
+        /// The name of the template that the rendering error occured in.
+        template: String,
+    },
     /// An IO error occured
     Io(std::io::ErrorKind),
     /// UTF-8 conversion error
@@ -88,6 +95,9 @@ impl fmt::Display for Error {
             ErrorKind::CallFunction(ref name) => write!(f, "Function call '{}' failed", name),
             ErrorKind::CallFilter(ref name) => write!(f, "Filter call '{}' failed", name),
             ErrorKind::CallTest(ref name) => write!(f, "Test call '{}' failed", name),
+            ErrorKind::RenderError { ref kind, ref template } => {
+                write!(f, "{} while rendering '{}'", kind, template)
+            }
             ErrorKind::Io(ref io_error) => {
                 write!(f, "Io error while writing rendered value to output: {:?}", io_error)
             }
@@ -179,6 +189,11 @@ impl Error {
         Self { kind: ErrorKind::CallTest(name.to_string()), source: Some(source.into()) }
     }
 
+    /// Creates an error wrapping rendering error.
+    pub fn render(kind: RenderErrorKind, template: impl ToString) -> Self {
+        Self { kind: ErrorKind::RenderError { kind, template: template.to_string() }, source: None }
+    }
+
     /// Creates JSON error
     pub fn json(value: serde_json::Error) -> Self {
         Self { kind: ErrorKind::Json(value), source: None }
@@ -222,6 +237,27 @@ impl From<serde_json::Error> for Error {
 }
 /// Convenient wrapper around std::Result.
 pub type Result<T> = ::std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum RenderErrorKind {
+    MissingVariable(String),
+}
+
+impl fmt::Display for RenderErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RenderErrorKind::MissingVariable(ref variable) => {
+                write!(f, "Variable `{}` not found in context", variable)
+            }
+        }
+    }
+}
+
+impl RenderErrorKind {
+    pub fn missing_variable(name: impl ToString) -> Self {
+        Self::MissingVariable(name.to_string())
+    }
+}
 
 #[cfg(test)]
 mod tests {
