@@ -76,8 +76,8 @@ fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
         match call_stack.lookup(path) {
             Some(v) => Ok(v),
             None => Err(Error::render(
-                RenderErrorKind::MissingVariable(path.to_string()),
-                &call_stack.active_template().name,
+                RenderErrorKind::MissingVariable { name: path.to_string(), full_path: None },
+                call_stack.active_template().name.clone(),
             )),
         }
     } else {
@@ -85,13 +85,13 @@ fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
 
         match call_stack.lookup(full_path.as_ref()) {
             Some(v) => Ok(v),
-            None => Err(Error::msg(format!(
-                "Variable `{}` not found in context while rendering '{}': \
-                 the evaluated version was `{}`. Maybe the index is out of bounds?",
-                path,
-                call_stack.active_template().name,
-                full_path,
-            ))),
+            None => Err(Error::render(
+                RenderErrorKind::MissingVariable {
+                    name: path.to_string(),
+                    full_path: Some(full_path),
+                },
+                call_stack.active_template().name.clone(),
+            )),
         }
     }
 }

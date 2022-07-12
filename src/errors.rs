@@ -244,7 +244,14 @@ pub struct RenderError {
 
 #[derive(Debug)]
 pub enum RenderErrorKind {
-    MissingVariable(String),
+    /// A variable was not found in the current context.
+    MissingVariable {
+        /// The name of the missing variable
+        name: String,
+        /// If a variable was indexed, but the value could , then this field contains the full, evaluated
+        /// path of the indexed variable. This field is typically present on
+        full_path: Option<String>,
+    },
 }
 
 /// Convenient wrapper around std::Result.
@@ -258,12 +265,20 @@ impl StdError for RenderError {
 
 impl fmt::Display for RenderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            RenderErrorKind::MissingVariable(ref variable) => {
+        match &self.kind {
+            RenderErrorKind::MissingVariable { name, full_path: None } => {
                 write!(
                     f,
                     "Variable `{}` not found in context while rendering '{}'",
-                    variable, self.template
+                    name, self.template
+                )
+            }
+            RenderErrorKind::MissingVariable { name, full_path: Some(path) } => {
+                write!(
+                    f,
+                    "Variable `{}` not found in context while rendering '{}': \
+                    the evaluated version was `{}`. Maybe the index is out of bounds?",
+                    name, self.template, path
                 )
             }
         }
