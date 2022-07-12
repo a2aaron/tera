@@ -40,12 +40,7 @@ pub enum ErrorKind {
     /// An error occured while executing a test.
     CallTest(String),
     /// A rendering error occured.
-    RenderError {
-        /// The kind of rendering error that occured.
-        kind: RenderErrorKind,
-        /// The name of the template that the rendering error occured in.
-        template: String,
-    },
+    RenderError(RenderError),
     /// An IO error occured
     Io(std::io::ErrorKind),
     /// UTF-8 conversion error
@@ -95,9 +90,7 @@ impl fmt::Display for Error {
             ErrorKind::CallFunction(ref name) => write!(f, "Function call '{}' failed", name),
             ErrorKind::CallFilter(ref name) => write!(f, "Filter call '{}' failed", name),
             ErrorKind::CallTest(ref name) => write!(f, "Test call '{}' failed", name),
-            ErrorKind::RenderError { ref kind, ref template } => {
-                write!(f, "{} while rendering '{}'", kind, template)
-            }
+            ErrorKind::RenderError(ref err) => write!(f, "{}", err),
             ErrorKind::Io(ref io_error) => {
                 write!(f, "Io error while writing rendered value to output: {:?}", io_error)
             }
@@ -189,9 +182,12 @@ impl Error {
         Self { kind: ErrorKind::CallTest(name.to_string()), source: Some(source.into()) }
     }
 
-    /// Creates an error wrapping rendering error.
+    /// Creates an error wrapping a rendering error.
     pub fn render(kind: RenderErrorKind, template: impl ToString) -> Self {
-        Self { kind: ErrorKind::RenderError { kind, template: template.to_string() }, source: None }
+        Self {
+            kind: ErrorKind::RenderError(RenderError { kind, template: template.to_string() }),
+            source: None,
+        }
     }
 
     /// Creates JSON error
@@ -239,23 +235,38 @@ impl From<serde_json::Error> for Error {
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug)]
+pub struct RenderError {
+    /// The kind of rendering error that occured.
+    kind: RenderErrorKind,
+    /// The name of the template that the rendering error occured in.
+    template: String,
+}
+
+#[derive(Debug)]
 pub enum RenderErrorKind {
     MissingVariable(String),
 }
 
-impl fmt::Display for RenderErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RenderErrorKind::MissingVariable(ref variable) => {
-                write!(f, "Variable `{}` not found in context", variable)
-            }
-        }
+/// Convenient wrapper around std::Result.
+pub type RenderResult<T> = ::std::result::Result<T, RenderError>;
+
+impl StdError for RenderError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        None
     }
 }
 
-impl RenderErrorKind {
-    pub fn missing_variable(name: impl ToString) -> Self {
-        Self::MissingVariable(name.to_string())
+impl fmt::Display for RenderError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            RenderErrorKind::MissingVariable(ref variable) => {
+                write!(
+                    f,
+                    "Variable `{}` not found in context while rendering '{}'",
+                    variable, self.template
+                )
+            }
+        }
     }
 }
 

@@ -76,7 +76,7 @@ fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
         match call_stack.lookup(path) {
             Some(v) => Ok(v),
             None => Err(Error::render(
-                RenderErrorKind::missing_variable(path),
+                RenderErrorKind::MissingVariable(path.to_string()),
                 &call_stack.active_template().name,
             )),
         }
