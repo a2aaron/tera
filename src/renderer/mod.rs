@@ -2,7 +2,7 @@ mod square_brackets;
 #[cfg(test)]
 mod tests;
 
-mod call_stack;
+pub mod call_stack;
 mod for_loop;
 mod macros;
 mod processor;

@@ -77,7 +77,7 @@ fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
             Some(v) => Ok(v),
             None => Err(Error::render(
                 RenderErrorKind::MissingVariable { name: path.to_string(), full_path: None },
-                call_stack.active_template().name.clone(),
+                call_stack,
             )),
         }
     } else {
@@ -90,7 +90,7 @@ fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
                     name: path.to_string(),
                     full_path: Some(full_path),
                 },
-                call_stack.active_template().name.clone(),
+                call_stack,
             )),
         }
     }

@@ -2,6 +2,8 @@ use std::convert::Into;
 use std::error::Error as StdError;
 use std::fmt;
 
+use crate::renderer::call_stack::CallStack;
+
 /// The kind of an error (non-exhaustive)
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -183,9 +185,13 @@ impl Error {
     }
 
     /// Creates an error wrapping a rendering error.
-    pub fn render(kind: RenderErrorKind, template: impl ToString) -> Self {
+    pub fn render<'a>(kind: RenderErrorKind, call_stack: &CallStack<'a>) -> Self {
         Self {
-            kind: ErrorKind::RenderError(RenderError { kind, template: template.to_string() }),
+            kind: ErrorKind::RenderError(RenderError {
+                kind,
+                template: call_stack.active_template().name.clone(),
+                context: call_stack.current_context_cloned(),
+            }),
             source: None,
         }
     }
@@ -237,9 +243,11 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct RenderError {
     /// The kind of rendering error that occured.
-    kind: RenderErrorKind,
+    pub kind: RenderErrorKind,
     /// The name of the template that the rendering error occured in.
-    template: String,
+    pub template: String,
+    /// The context
+    pub context: serde_json::Value,
 }
 
 #[derive(Debug)]
@@ -255,7 +263,7 @@ pub enum RenderErrorKind {
 }
 
 /// Convenient wrapper around std::Result.
-pub type RenderResult<T> = ::std::result::Result<T, RenderError>;
+pub type RenderResult<'a, T> = ::std::result::Result<T, RenderError>;
 
 impl StdError for RenderError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
