@@ -185,15 +185,8 @@ impl Error {
     }
 
     /// Creates an error wrapping a rendering error.
-    pub fn render<'a>(kind: RenderErrorKind, call_stack: &CallStack<'a>) -> Self {
-        Self {
-            kind: ErrorKind::RenderError(RenderError {
-                kind,
-                template: call_stack.active_template().name.clone(),
-                context: call_stack.current_context_cloned(),
-            }),
-            source: None,
-        }
+    pub fn render(error: RenderError) -> Self {
+        Self { kind: ErrorKind::RenderError(error), source: None }
     }
 
     /// Creates JSON error
@@ -237,6 +230,12 @@ impl From<serde_json::Error> for Error {
         Self::json(e)
     }
 }
+impl From<RenderError> for Error {
+    fn from(e: RenderError) -> Self {
+        Self::render(e)
+    }
+}
+
 /// Convenient wrapper around std::Result.
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -260,14 +259,22 @@ pub enum RenderErrorKind {
         /// path of the indexed variable. This field is typically present on
         full_path: Option<String>,
     },
+    /// A variable could not be evaluated for some reason.
+    EvalError { name: String, reason: Box<RenderError> },
+    /// A variable was expected to evaluate to String or Number, but wasn't
+    IndexTypeError { sub_var: String, key: String },
 }
 
 /// Convenient wrapper around std::Result.
-pub type RenderResult<'a, T> = ::std::result::Result<T, RenderError>;
+pub type RenderResult<T> = ::std::result::Result<T, RenderError>;
 
 impl StdError for RenderError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        None
+        if let RenderErrorKind::EvalError { reason, .. } = &self.kind {
+            Some(reason)
+        } else {
+            None
+        }
     }
 }
 
@@ -289,6 +296,26 @@ impl fmt::Display for RenderError {
                     name, self.template, path
                 )
             }
+            RenderErrorKind::EvalError { name, reason } => {
+                write!(f, "Variable {} can not be evaluated because: {}", name, reason)
+            }
+            RenderErrorKind::IndexTypeError { sub_var, key } => write!(
+                f,
+                "Only variables evaluating to String or Number can be used as \
+                 index (`{}` of `{}`)",
+                sub_var, key,
+            ),
+        }
+    }
+}
+
+impl RenderError {
+    /// Creates an error wrapping a rendering error.
+    pub fn new<'a>(kind: RenderErrorKind, call_stack: &CallStack<'a>) -> Self {
+        RenderError {
+            kind,
+            template: call_stack.active_template().name.clone(),
+            context: call_stack.current_context_cloned(),
         }
     }
 }

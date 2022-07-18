@@ -5,7 +5,7 @@ use std::io::Write;
 use serde_json::{to_string_pretty, to_value, Number, Value};
 
 use crate::context::{ValueRender, ValueTruthy};
-use crate::errors::{Error, RenderErrorKind, Result};
+use crate::errors::{Error, RenderError, RenderErrorKind, RenderResult, Result};
 use crate::parser::ast::*;
 use crate::renderer::call_stack::CallStack;
 use crate::renderer::for_loop::ForLoop;
@@ -22,7 +22,7 @@ static MAGICAL_DUMP_VAR: &str = "__tera_context";
 
 /// This will convert a Tera variable to a json pointer if it is possible by replacing
 /// the index with their evaluated stringified value
-fn evaluate_sub_variables<'a>(key: &str, call_stack: &CallStack<'a>) -> Result<String> {
+fn evaluate_sub_variables<'a>(key: &str, call_stack: &CallStack<'a>) -> RenderResult<String> {
     let sub_vars_to_calc = pull_out_square_bracket(key);
     let mut new_key = key.to_string();
 
@@ -30,21 +30,23 @@ fn evaluate_sub_variables<'a>(key: &str, call_stack: &CallStack<'a>) -> Result<S
         // Translate from variable name to variable value
         match process_path(sub_var.as_ref(), call_stack) {
             Err(e) => {
-                return Err(Error::msg(format!(
-                    "Variable {} can not be evaluated because: {}",
-                    key, e
-                )));
+                return Err(RenderError::new(
+                    RenderErrorKind::EvalError { name: key.to_string(), reason: Box::new(e) },
+                    call_stack,
+                ));
             }
             Ok(post_var) => {
                 let post_var_as_str = match *post_var {
                     Value::String(ref s) => s.to_string(),
                     Value::Number(ref n) => n.to_string(),
                     _ => {
-                        return Err(Error::msg(format!(
-                            "Only variables evaluating to String or Number can be used as \
-                             index (`{}` of `{}`)",
-                            sub_var, key,
-                        )));
+                        return Err(RenderError::new(
+                            RenderErrorKind::IndexTypeError {
+                                sub_var: sub_var.to_string(),
+                                key: key.to_string(),
+                            },
+                            call_stack,
+                        ));
                     }
                 };
 
@@ -71,11 +73,11 @@ fn evaluate_sub_variables<'a>(key: &str, call_stack: &CallStack<'a>) -> Result<S
         .replace("]", ""))
 }
 
-fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
+fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> RenderResult<Val<'a>> {
     if !path.contains('[') {
         match call_stack.lookup(path) {
             Some(v) => Ok(v),
-            None => Err(Error::render(
+            None => Err(RenderError::new(
                 RenderErrorKind::MissingVariable { name: path.to_string(), full_path: None },
                 call_stack,
             )),
@@ -85,7 +87,7 @@ fn process_path<'a>(path: &str, call_stack: &CallStack<'a>) -> Result<Val<'a>> {
 
         match call_stack.lookup(full_path.as_ref()) {
             Some(v) => Ok(v),
-            None => Err(Error::render(
+            None => Err(RenderError::new(
                 RenderErrorKind::MissingVariable {
                     name: path.to_string(),
                     full_path: Some(full_path),
@@ -400,7 +402,7 @@ impl<'a> Processor<'a> {
                             self.get_default_value(expr)?
                         } else {
                             if !expr.negated {
-                                return Err(e);
+                                return Err(e.into());
                             }
                             // A negative undefined ident is !false so truthy
                             return Ok(Cow::Owned(Value::Bool(true)));
@@ -933,7 +935,7 @@ impl<'a> Processor<'a> {
     }
 
     /// Looks up identifier and returns its value
-    fn lookup_ident(&self, key: &str) -> Result<Val<'a>> {
+    fn lookup_ident(&self, key: &str) -> RenderResult<Val<'a>> {
         // Magical variable that just dumps the context
         if key == MAGICAL_DUMP_VAR {
             // Unwraps are safe since we are dealing with things that are already Value
